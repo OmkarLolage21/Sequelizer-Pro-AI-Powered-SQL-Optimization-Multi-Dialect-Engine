@@ -1,0 +1,3 @@
+weaviate-client
+langchain
+langchain-community
