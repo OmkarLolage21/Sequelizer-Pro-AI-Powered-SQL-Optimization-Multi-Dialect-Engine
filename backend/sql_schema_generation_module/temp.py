@@ -74,6 +74,6 @@ def process_query(user_query):
     return retrieved_text
 
 if __name__ == "__main__":
-    user_query = "Give me a database table schema for my student management system"
+    user_query = "Give me a database table schema for my employee management system"
     response = process_query(user_query)
     print("\nFinal Response:\n", response)
