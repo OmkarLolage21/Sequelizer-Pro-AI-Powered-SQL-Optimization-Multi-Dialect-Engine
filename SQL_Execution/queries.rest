@@ -1,0 +1,25 @@
+### Execute MySQL Query - Fetch rows from customers table
+POST http://localhost:5000/execute/mysql
+Content-Type: application/json
+
+{
+  "query": "SELECT * FROM customers"
+}
+
+
+### Execute Trino Query - Fetch rows from customers table
+POST http://localhost:5000/execute/trino
+Content-Type: application/json
+
+{
+  "query": "SELECT * FROM customers"
+}
+
+
+### Execute Spark Query - Fetch rows from customers table
+POST http://localhost:5000/execute/spark
+Content-Type: application/json
+
+{
+  "query": "SELECT * FROM customers"
+}

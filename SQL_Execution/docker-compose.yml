@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sales
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - sql_network
+    ports:
+      - "3306:3306"
+
+  trino:
+    image: trinodb/trino:426
+    container_name: trino_coordinator
+    depends_on:
+      - mysql
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog
+    networks:
+      - sql_network
+    ports:
+      - "8080:8080"
+
+  spark:
+    build: ./spark
+    container_name: spark_master
+    hostname: spark_master
+    depends_on:
+      - mysql
+    networks:
+      - sql_network
+    ports:
+      - "4040:4040"
+      - "7077:7077"
+    environment:
+      - SPARK_MODE=master
+
+volumes:
+  mysql_data:
+
+networks:
+  sql_network:
+    driver: bridge
