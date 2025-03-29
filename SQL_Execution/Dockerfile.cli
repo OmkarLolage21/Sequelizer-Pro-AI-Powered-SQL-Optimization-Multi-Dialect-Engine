@@ -1,0 +1,26 @@
+# Build CLI images with:
+# docker build -t trino-cli:latest -f Dockerfile.cli --build-arg CLI=trino .
+# docker build -t spark-cli:latest -f Dockerfile.cli --build-arg CLI=spark .
+# docker build -t mysql-cli:latest -f Dockerfile.cli --build-arg CLI=mysql .
+
+ARG CLI
+FROM alpine:3.18 AS base
+
+RUN apk add --no-cache curl
+
+# Trino CLI
+FROM base AS trino
+RUN curl -L https://repo1.maven.org/maven2/io/trino/trino-cli/426/trino-cli-426-executable.jar -o /trino \
+    && chmod +x /trino
+ENTRYPOINT ["/trino", "--output-format", "CSV_HEADER"]
+
+# Spark CLI
+FROM base AS spark
+RUN apk add --no-cache openjdk11-jre
+COPY --from=bitnami/spark:3.5 /opt/bitnami/spark /spark
+ENTRYPOINT ["/spark/bin/spark-sql"]
+
+# MySQL CLI
+FROM base AS mysql
+RUN apk add --no-cache mysql-client
+ENTRYPOINT ["mysql", "--vertical"]

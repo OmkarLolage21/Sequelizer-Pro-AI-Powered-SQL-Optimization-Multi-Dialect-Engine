@@ -71,7 +71,26 @@ ORDER BY
   total_spent DESC`,
   },
 }
+interface OriginalData {
+  columns: string[];
+  results: any[][];
+}
 
+// interface FormattedResult {
+//   id: number;
+//   name: string;
+//   email: string;
+// }
+function convertDataFormat(data: OriginalData): any[] {
+  const { columns, results } = data;
+  return results.map(result => {
+    const formattedResult: any = {};
+    columns.forEach((column, index) => {
+      formattedResult[column] = result[index];
+    });
+    return formattedResult ;
+  });
+}
 export default function SqlPage() {
   const searchParams = useSearchParams()
   const queryId = searchParams.get("id")
@@ -124,6 +143,8 @@ export default function SqlPage() {
     })
   }
 
+  
+
   const executeQuery = async () => {
     if (!editorContent.trim()) {
       toast({
@@ -139,29 +160,42 @@ export default function SqlPage() {
 
     try {
       // In production, replace with actual API call
-      // const response = await fetch('/api/query/execute', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ query: editorContent, dialect }),
-      // });
-      // const data = await response.json();
+      // console.log('http://localhost:5000/execute/'+ dialect.toLocaleLowerCase())
+      const response = await fetch('http://localhost:5000/execute/'+ dialect.toLocaleLowerCase(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: editorContent }),
+      });
+      const mockData = await response.json();
+      // console.log(mockData)
       // setQueryResults(data.results);
 
       // Simulate query execution
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
       // Mock results
-      const mockData = [
-        { category: "Electronics", total_sales: 125000, order_count: 450, customer_count: 320 },
-        { category: "Clothing", total_sales: 98000, order_count: 620, customer_count: 410 },
-        { category: "Home & Kitchen", total_sales: 76500, order_count: 380, customer_count: 290 },
-        { category: "Books", total_sales: 45000, order_count: 320, customer_count: 210 },
-        { category: "Sports", total_sales: 38500, order_count: 180, customer_count: 150 },
-      ]
+      // const mockData = [
+      //   { category: "Electronics", total_sales: 125000, order_count: 450, customer_count: 320 },
+      //   { category: "Clothing", total_sales: 98000, order_count: 620, customer_count: 410 },
+      //   { category: "Home & Kitchen", total_sales: 76500, order_count: 380, customer_count: 290 },
+      //   { category: "Books", total_sales: 45000, order_count: 320, customer_count: 210 },
+      //   { category: "Sports", total_sales: 38500, order_count: 180, customer_count: 150 },
+      // ]
 
-      setQueryResults(mockData)
+      if(dialect.toLowerCase() === 'trino'){
+        const originalData: OriginalData = {
+          columns: mockData.columns,
+          results: mockData.results,
+        };
+        const formattedResults = convertDataFormat(originalData);
+        console.log(formattedResults)
+        setQueryResults(formattedResults)
+      }else{
+        console.log(mockData.results)
+        setQueryResults(mockData.results)
+      }
 
       toast({
         title: "Query executed successfully",
