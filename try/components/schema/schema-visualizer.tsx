@@ -150,17 +150,18 @@ export function SchemaVisualizer({ schema, isEditMode = false, zoomLevel = 1 }: 
     gradient.appendChild(stop2)
 
     // Draw relationships first (so they appear behind tables)
-    schema.relationships.forEach((rel, index) => {
+    schema.relationships.forEach((rel) => {
       const fromTable = tablePositions[rel.from]
       const toTable = tablePositions[rel.to]
 
       if (!fromTable || !toTable) return
 
       // Find column positions
-      const fromColumnIndex =
-        schema.tables.find((t) => t.name === rel.from)?.columns.findIndex((c) => c.name === rel.fromColumn) || 0
-      const toColumnIndex =
-        schema.tables.find((t) => t.name === rel.to)?.columns.findIndex((c) => c.name === rel.toColumn) || 0
+      const fromTableObj = schema.tables.find(t => t.name === rel.from)
+      const toTableObj = schema.tables.find(t => t.name === rel.to)
+      
+      const fromColumnIndex = fromTableObj?.columns.findIndex(c => c.name === rel.fromColumn) ?? 0
+      const toColumnIndex = toTableObj?.columns.findIndex(c => c.name === rel.toColumn) ?? 0
 
       const fromY = fromTable.y + 40 + fromColumnIndex * 30 + 15
       const toY = toTable.y + 40 + toColumnIndex * 30 + 15
@@ -438,21 +439,17 @@ export function SchemaVisualizer({ schema, isEditMode = false, zoomLevel = 1 }: 
       if (!fromTable || !toTable) return
 
       // Find column positions
-      const fromColumnIndex =
-        schema.tables
-          .find((t) => t.name === fromTableName)
-          ?.columns.findIndex(
-            (c) =>
-              schema.relationships.find((r) => r.from === fromTableName && r.to === toTableName)?.fromColumn === c.name,
-          ) || 0
+      const fromTableObj = schema.tables.find(t => t.name === fromTableName)
+      const toTableObj = schema.tables.find(t => t.name === toTableName)
+      
+      const relationship = schema.relationships.find(r => 
+        r.from === fromTableName && r.to === toTableName
+      )
 
-      const toColumnIndex =
-        schema.tables
-          .find((t) => t.name === toTableName)
-          ?.columns.findIndex(
-            (c) =>
-              schema.relationships.find((r) => r.from === fromTableName && r.to === toTableName)?.toColumn === c.name,
-          ) || 0
+      if (!relationship || !fromTableObj || !toTableObj) return
+
+      const fromColumnIndex = fromTableObj.columns.findIndex(c => c.name === relationship.fromColumn)
+      const toColumnIndex = toTableObj.columns.findIndex(c => c.name === relationship.toColumn)
 
       const fromY = fromTable.y + 40 + fromColumnIndex * 30 + 15
       const toY = toTable.y + 40 + toColumnIndex * 30 + 15
@@ -534,4 +531,3 @@ export function SchemaVisualizer({ schema, isEditMode = false, zoomLevel = 1 }: 
     </div>
   )
 }
-

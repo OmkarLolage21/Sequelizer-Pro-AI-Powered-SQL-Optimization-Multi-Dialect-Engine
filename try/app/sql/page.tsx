@@ -161,7 +161,7 @@ export default function SqlPage() {
     try {
       // In production, replace with actual API call
       // console.log('http://localhost:5000/execute/'+ dialect.toLocaleLowerCase())
-      const response = await fetch('http://localhost:5000/execute/'+ dialect.toLocaleLowerCase(), {
+      const response = await fetch('http://localhost:5001/execute/'+ dialect.toLocaleLowerCase(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

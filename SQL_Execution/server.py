@@ -1,3 +1,4 @@
+
 import json
 import os
 import subprocess
@@ -127,4 +128,4 @@ def execute_spark():
     
 if __name__ == '__main__':
     # Run the Flask server on all interfaces on port 5000.
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5001)
