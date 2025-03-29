@@ -10,15 +10,123 @@ import { Sparkles, HelpCircle, Database, Table } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 
+interface Column {
+  name: string
+  type: string
+  isPrimary?: boolean
+  isNullable?: boolean
+}
+
+interface Table {
+  name: string
+  columns: Column[]
+}
+
+interface Relationship {
+  from: string
+  to: string
+  type: string
+  fromColumn: string
+  toColumn: string
+}
+
 export default function SchemaPage() {
   const [generatedSchema, setGeneratedSchema] = useState<string | null>(null)
   const [schemaId, setSchemaId] = useState<string | null>(null)
   const [schemaRationale, setSchemaRationale] = useState<string | null>(null)
 
+  const parseDDLToSchema = (ddl: string) => {
+    const tables: Table[] = []
+    const relationships: Relationship[] = []
+    
+    const tableRegex = /CREATE TABLE (\w+)\s*\(([\s\S]*?)\);/g
+    const columnRegex = /(\w+)\s+([\w\(\)\d,]+)(?:\s+(PRIMARY KEY|REFERENCES\s+(\w+)\((\w+)\)|NOT NULL))?/g
+    const primaryKeyRegex = /PRIMARY KEY\s*\(([^)]+)\)/g
+    const foreignKeyRegex = /FOREIGN KEY\s*\((\w+)\)\s*REFERENCES\s+(\w+)\((\w+)\)/g
+    
+    let tableMatch
+    while ((tableMatch = tableRegex.exec(ddl)) !== null) {
+      const tableName = tableMatch[1]
+      const tableContent = tableMatch[2]
+      
+      const columns: Column[] = []
+      let columnMatch
+      
+      // First find all primary keys defined in the table
+      const primaryKeys = new Set<string>()
+      let pkMatch
+      while ((pkMatch = primaryKeyRegex.exec(tableContent)) !== null) {
+        const pkColumns = pkMatch[1].split(',').map(col => col.trim().replace(/["`]/g, ''))
+        pkColumns.forEach(col => primaryKeys.add(col))
+      }
+      
+      // Reset regex state for column parsing
+      primaryKeyRegex.lastIndex = 0
+      
+      // Then parse columns
+      while ((columnMatch = columnRegex.exec(tableContent)) !== null) {
+        const columnName = columnMatch[1]
+        const columnType = columnMatch[2]
+        const isPrimary = primaryKeys.has(columnName) || columnMatch[3] === 'PRIMARY KEY'
+        const refTable = columnMatch[4]
+        const refColumn = columnMatch[5]
+        
+        columns.push({
+          name: columnName,
+          type: columnType,
+          isPrimary,
+          isNullable: !isPrimary && !columnMatch[0].includes('NOT NULL')
+        })
+        
+        if (refTable) {
+          relationships.push({
+            from: tableName,
+            to: refTable,
+            type: 'many-to-one',
+            fromColumn: columnName,
+            toColumn: refColumn
+          })
+        }
+      }
+      
+      // Now check for explicit FOREIGN KEY constraints
+      let fkMatch
+      while ((fkMatch = foreignKeyRegex.exec(tableContent)) !== null) {
+        const fromColumn = fkMatch[1]
+        const toTable = fkMatch[2]
+        const toColumn = fkMatch[3]
+        
+        relationships.push({
+          from: tableName,
+          to: toTable,
+          type: 'many-to-one',
+          fromColumn: fromColumn,
+          toColumn: toColumn
+        })
+      }
+      
+      tables.push({
+        name: tableName,
+        columns
+      })
+    }
+    
+    return { tables, relationships }
+  }
+
   const handleSchemaGenerated = (schema: string, id: string, rationale: string) => {
     setGeneratedSchema(schema)
     setSchemaId(id)
     setSchemaRationale(rationale)
+    
+    // Store the schema data in session storage
+    const schemaData = {
+      name: "Generated Schema",
+      description: "Database schema generated from your requirements",
+      ddl: schema,
+      ...parseDDLToSchema(schema)
+    }
+    sessionStorage.setItem(`schema-${id}`, JSON.stringify(schemaData))
   }
 
   return (
@@ -41,7 +149,6 @@ export default function SchemaPage() {
             </Link>
           )}
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <Card className="bg-gray-900 border-gray-800">

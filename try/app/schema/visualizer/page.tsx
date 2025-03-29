@@ -42,95 +42,28 @@ export default function SchemaVisualizerPage() {
   const searchParams = useSearchParams()
   const schemaId = searchParams.get("id")
   const [schema, setSchema] = useState<Schema | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
 
   useEffect(() => {
-    const fetchSchema = async () => {
-      setLoading(true)
+    if (!schemaId) return
+
+    const storedSchema = sessionStorage.getItem(`schema-${schemaId}`)
+    if (storedSchema) {
       try {
-        const response = await fetch(`http://localhost:5000/get_schema?id=${schemaId}`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch schema')
-        }
-        const data = await response.json()
-        
-        const parsedSchema = parseDDLToSchema(data.sql_code.sql_statements)
-        setSchema({
-          ...parsedSchema,
-          name: data.name || "Generated Schema",
-          description: data.description || "Database schema generated from your requirements",
-          ddl: data.sql_code.sql_statements
-        })
+        setSchema(JSON.parse(storedSchema))
       } catch (error) {
-        console.error("Error fetching schema:", error)
+        console.error("Error parsing stored schema:", error)
         toast({
           title: "Error",
-          description: "Failed to load schema. Please try again.",
+          description: "Failed to load schema data",
           variant: "destructive",
         })
-      } finally {
-        setLoading(false)
       }
-    }
-
-    if (schemaId) {
-      fetchSchema()
-    } else {
-      setLoading(false)
     }
   }, [schemaId])
-
-  const parseDDLToSchema = (ddl: string): Omit<Schema, 'name' | 'description' | 'ddl'> => {
-    const tables: Table[] = []
-    const relationships: Relationship[] = []
-    
-    const tableRegex = /CREATE TABLE (\w+)\s*\(([\s\S]*?)\);/g
-    const columnRegex = /(\w+)\s+([\w\(\)\d,]+)(?:\s+(PRIMARY KEY|REFERENCES\s+(\w+)\((\w+)\)))?/g
-    
-    let tableMatch
-    while ((tableMatch = tableRegex.exec(ddl)) !== null) {
-      const tableName = tableMatch[1]
-      const tableContent = tableMatch[2]
-      
-      const columns: Column[] = []
-      let columnMatch
-      
-      while ((columnMatch = columnRegex.exec(tableContent)) !== null) {
-        const columnName = columnMatch[1]
-        const columnType = columnMatch[2]
-        const isPrimary = columnMatch[3] === 'PRIMARY KEY'
-        const refTable = columnMatch[4]
-        const refColumn = columnMatch[5]
-        
-        columns.push({
-          name: columnName,
-          type: columnType,
-          isPrimary,
-          isNullable: !isPrimary && !columnMatch[0].includes('NOT NULL')
-        })
-        
-        if (refTable) {
-          relationships.push({
-            from: tableName,
-            to: refTable,
-            type: 'many-to-one',
-            fromColumn: columnName,
-            toColumn: refColumn
-          })
-        }
-      }
-      
-      tables.push({
-        name: tableName,
-        columns
-      })
-    }
-    
-    return { tables, relationships }
-  }
 
   const copyDDL = () => {
     if (schema?.ddl) {
@@ -185,11 +118,15 @@ export default function SchemaVisualizerPage() {
       {!isFullscreen && <Navbar />}
 
       <div className={`${isFullscreen ? "p-0" : "container mx-auto px-4 py-8"}`}>
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        {!schema ? (
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-bold text-white mb-4">Schema Not Found</h2>
+            <p className="text-gray-400 mb-8">The requested schema could not be found</p>
+            <Button asChild className="bg-blue-600 hover:bg-blue-700">
+              <a href="/schema">Create New Schema</a>
+            </Button>
           </div>
-        ) : schema ? (
+        ) : (
           <>
             {!isFullscreen && (
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
@@ -295,14 +232,6 @@ export default function SchemaVisualizerPage() {
               </Tabs>
             )}
           </>
-        ) : (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-white mb-4">Schema Not Found</h2>
-            <p className="text-gray-400 mb-8">The requested schema could not be found</p>
-            <Button asChild className="bg-blue-600 hover:bg-blue-700">
-              <a href="/schema">Create New Schema</a>
-            </Button>
-          </div>
         )}
       </div>
     </div>
