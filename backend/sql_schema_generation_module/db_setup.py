@@ -5,14 +5,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-WEAVIATE_URL = os.getenv("WEAVIATE_URL")
-WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY")
+weaviate_url="https://9yqwkasqgihqvmw3koycg.c0.asia-southeast1.gcp.weaviate.cloud"
+weaviate_api_key="yTIQQldOtWhMlkmVPx2Fan3o6ZyVEgv32573"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 # Initialize Weaviate Client
 client = weaviate.Client(
-    url=WEAVIATE_URL,
-    auth_client_secret=weaviate.AuthApiKey(WEAVIATE_API_KEY),
+    url=weaviate_url,
+    auth_client_secret=weaviate.AuthApiKey(weaviate_api_key),
     additional_headers={"X-HuggingFace-Api-Key": HF_TOKEN},
 )
 
