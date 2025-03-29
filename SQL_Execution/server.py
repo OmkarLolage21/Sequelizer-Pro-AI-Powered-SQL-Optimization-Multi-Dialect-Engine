@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 from flask import Flask, request, jsonify
 import mysql.connector
+from flask_cors import CORS 
 import trino
 import sys
 import json
@@ -13,6 +14,9 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
 
 # MySQL connection configuration.
 MYSQL_CONFIG = {
