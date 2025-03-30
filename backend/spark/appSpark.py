@@ -182,22 +182,6 @@ def process_query(user_query):
         "generated_query": spark_query
     }
 
-@app.route('/set_schema', methods=['POST'])
-def set_schema():
-    global schema
-    schema = request.json  # Expecting JSON payload
-    return jsonify({"message": "Schema set successfully", "schema": schema}), 200
-
-@app.route('/get_schema', methods=['GET'])
-def get_schema():
-    return jsonify({"schema": schema}), 200
-
-@app.route('/clear_schema', methods=['POST'])
-def clear_schema():
-    global schema
-    schema = {}
-    return jsonify({"message": "Schema cleared successfully"}), 200
-
 @app.route('/api/spark/query', methods=['POST'])
 def generate_spark_query_endpoint():
     """API endpoint to generate Spark queries with best practices."""

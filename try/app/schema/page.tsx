@@ -52,7 +52,6 @@ export default function SchemaPage() {
       const columns: Column[] = []
       let columnMatch
       
-      // First find all primary keys defined in the table
       const primaryKeys = new Set<string>()
       let pkMatch
       while ((pkMatch = primaryKeyRegex.exec(tableContent)) !== null) {
@@ -60,10 +59,8 @@ export default function SchemaPage() {
         pkColumns.forEach(col => primaryKeys.add(col))
       }
       
-      // Reset regex state for column parsing
       primaryKeyRegex.lastIndex = 0
       
-      // Then parse columns
       while ((columnMatch = columnRegex.exec(tableContent)) !== null) {
         const columnName = columnMatch[1]
         const columnType = columnMatch[2]
@@ -89,7 +86,6 @@ export default function SchemaPage() {
         }
       }
       
-      // Now check for explicit FOREIGN KEY constraints
       let fkMatch
       while ((fkMatch = foreignKeyRegex.exec(tableContent)) !== null) {
         const fromColumn = fkMatch[1]
@@ -119,7 +115,6 @@ export default function SchemaPage() {
     setSchemaId(id)
     setSchemaRationale(rationale)
     
-    // Store the schema data in session storage
     const schemaData = {
       name: "Generated Schema",
       description: "Database schema generated from your requirements",
@@ -130,51 +125,70 @@ export default function SchemaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.1),transparent_50%)] animate-pulse"></div>
+      </div>
+
       <Navbar />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+      <div className="relative z-10 container mx-auto px-4 py-8">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8"
+        >
           <div>
-            <h1 className="text-3xl font-bold text-white">Schema Generator</h1>
-            <p className="text-gray-400 mt-2">Create optimized database schemas from natural language descriptions</p>
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-500">
+              Schema Generator
+            </h1>
+            <p className="text-gray-300 mt-2">Create optimized database schemas from natural language</p>
           </div>
 
           {generatedSchema && schemaId && (
             <Link href={`/schema/visualizer?id=${schemaId}`}>
-              <Button className="mt-4 md:mt-0 bg-blue-600 hover:bg-blue-700">
+              <Button className="mt-4 md:mt-0 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Visualize Schema
               </Button>
             </Link>
           )}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Card className="bg-gray-900 border-gray-800">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Database className="mr-2 h-5 w-5 text-blue-500" />
-                  AI Schema Assistant
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  Describe your database needs in natural language
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SchemaChat onSchemaGenerated={handleSchemaGenerated} />
-              </CardContent>
-            </Card>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <Card className="bg-gray-900/80 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 transition-all group">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center">
+                    <Database className="mr-2 h-5 w-5 text-purple-400" />
+                    AI Schema Assistant
+                  </CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Describe your database needs in natural language
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SchemaChat onSchemaGenerated={handleSchemaGenerated} />
+                </CardContent>
+              </Card>
+            </motion.div>
           </div>
 
-          <div>
+          <div className="space-y-6">
             <Tabs defaultValue="schema" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-gray-800">
-                <TabsTrigger value="schema" className="data-[state=active]:bg-gray-700">
+              <TabsList className="grid w-full grid-cols-2 bg-gray-800/50 backdrop-blur-sm border border-gray-700">
+                <TabsTrigger value="schema" className="data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-400">
                   Schema
                 </TabsTrigger>
-                <TabsTrigger value="rationale" className="data-[state=active]:bg-gray-700">
-                  Why This Schema?
+                <TabsTrigger value="rationale" className="data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-400">
+                  Rationale
                 </TabsTrigger>
               </TabsList>
 
@@ -185,16 +199,16 @@ export default function SchemaPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
                   >
-                    <Card className="bg-gray-900 border-gray-800">
+                    <Card className="bg-gray-900/80 backdrop-blur-sm border border-gray-700">
                       <CardHeader>
                         <CardTitle className="text-white flex items-center">
-                          <Table className="mr-2 h-5 w-5 text-blue-500" />
+                          <Table className="mr-2 h-5 w-5 text-purple-400" />
                           Generated Schema
                         </CardTitle>
                         <CardDescription className="text-gray-400">Your schema has been created</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="bg-gray-800 p-4 rounded-md">
+                        <div className="bg-gray-800/50 p-4 rounded-md border border-gray-700">
                           <pre className="text-sm text-gray-300 whitespace-pre-wrap overflow-auto max-h-[400px]">
                             {generatedSchema}
                           </pre>
@@ -203,11 +217,11 @@ export default function SchemaPage() {
                     </Card>
                   </motion.div>
                 ) : (
-                  <Card className="bg-gray-900 border-gray-800">
+                  <Card className="bg-gray-900/80 backdrop-blur-sm border border-gray-700">
                     <CardContent className="p-8 text-center">
-                      <Database className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+                      <Database className="h-12 w-12 text-gray-600 mx-auto mb-4" />
                       <p className="text-gray-400">
-                        Describe your database requirements in the chat to generate a schema
+                        Describe your database requirements to generate a schema
                       </p>
                     </CardContent>
                   </Card>
@@ -221,56 +235,61 @@ export default function SchemaPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
                   >
-                    <Card className="bg-gray-900 border-gray-800">
+                    <Card className="bg-gray-900/80 backdrop-blur-sm border border-gray-700">
                       <CardHeader>
                         <CardTitle className="text-white flex items-center">
-                          <HelpCircle className="mr-2 h-5 w-5 text-green-500" />
+                          <HelpCircle className="mr-2 h-5 w-5 text-blue-400" />
                           Schema Rationale
                         </CardTitle>
                         <CardDescription className="text-gray-400">Why this schema design was chosen</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="bg-gray-800 p-4 rounded-md">
+                        <div className="bg-gray-800/50 p-4 rounded-md border border-gray-700">
                           <div className="text-sm text-gray-300 whitespace-pre-wrap">{schemaRationale}</div>
                         </div>
                       </CardContent>
                     </Card>
                   </motion.div>
                 ) : (
-                  <Card className="bg-gray-900 border-gray-800">
+                  <Card className="bg-gray-900/80 backdrop-blur-sm border border-gray-700">
                     <CardContent className="p-8 text-center">
-                      <HelpCircle className="h-12 w-12 text-gray-700 mx-auto mb-4" />
-                      <p className="text-gray-400">Generate a schema to see the rationale behind its design</p>
+                      <HelpCircle className="h-12 w-12 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400">Generate a schema to see the rationale</p>
                     </CardContent>
                   </Card>
                 )}
               </TabsContent>
             </Tabs>
 
-            <div className="mt-6 bg-blue-900/20 border border-blue-800/30 rounded-lg p-4">
-              <h3 className="text-blue-400 font-medium mb-2 flex items-center">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-purple-900/20 border border-purple-800/30 rounded-lg p-4 backdrop-blur-sm"
+            >
+              <h3 className="text-purple-400 font-medium mb-2 flex items-center">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Pro Tips
               </h3>
               <ul className="space-y-2 text-gray-300 text-sm">
                 <li className="flex items-start">
-                  <span className="text-blue-500 mr-2">•</span>
+                  <span className="text-purple-400 mr-2">•</span>
                   <span>Be specific about your business domain</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="text-blue-500 mr-2">•</span>
+                  <span className="text-purple-400 mr-2">•</span>
                   <span>Mention expected data volumes</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="text-blue-500 mr-2">•</span>
+                  <span className="text-purple-400 mr-2">•</span>
                   <span>Describe relationships between entities</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="text-blue-500 mr-2">•</span>
+                  <span className="text-purple-400 mr-2">•</span>
                   <span>Specify any performance requirements</span>
                 </li>
               </ul>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
