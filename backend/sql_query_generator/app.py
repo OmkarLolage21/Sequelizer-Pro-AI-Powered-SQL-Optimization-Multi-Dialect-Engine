@@ -8,7 +8,9 @@ import os
 import re
 import time
 from dotenv import load_dotenv
+import pickle
 
+global user_query
 # Load environment variables
 load_dotenv()
 
@@ -19,12 +21,10 @@ CORS(app)  # Enable CORS for cross-origin requests
 # Get API keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-import pickle
-
 
 # Load the retriever object
 with open("retriever.pkl", "rb") as f:
-    retriever =pickle.load(f)
+    retriever = pickle.load(f)
 
 # Contextual Compression with Cohere
 compressor = CohereRerank(cohere_api_key=COHERE_API_KEY)
@@ -33,9 +33,12 @@ compression_retriever = ContextualCompressionRetriever(
     base_retriever=retriever
 )
 
-
 # Initialize Groq client
 clientg = Groq(api_key=GROQ_API_KEY)
+
+# Global feedback dictionary to store user feedback
+global feedback
+feedback = {}
 
 def get_trino_query_template():
     return """
@@ -43,7 +46,10 @@ def get_trino_query_template():
     Given the following:
     User Question: {user_query}
     Context from Documentation: {context}
-    
+
+    Previous User Feedback (consider this carefully):
+    {feedback_formatted}
+
     Please provide:
     1. A detailed Trino SQL query that addresses the user's question
     2. An explanation of the query components
@@ -55,6 +61,7 @@ def get_trino_query_template():
     - Partition pruning and predicate pushdown
     - Proper join strategies
     - Performance optimization techniques
+    - The feedback from previous interactions to improve this response
     
     Format your response as:
     QUERY:
@@ -69,6 +76,19 @@ def get_trino_query_template():
 
 def generate_trino_query(user_query, context):
     """Generate a Trino-specific SQL query based on user input and context."""
+    global feedback
+    
+    # Format the feedback in a more structured way for the LLM
+    feedback_formatted = ""
+    if feedback:
+        feedback_formatted = "Previous interactions:\n"
+        for q, data in feedback.items():
+            feedback_formatted += f"Question: {q}\n"
+            feedback_formatted += f"Response: {data['response']}\n"
+            feedback_formatted += f"User Feedback: {data['feedback']}\n\n"
+    else:
+        feedback_formatted = "No previous feedback available."
+    
     chat_completion = clientg.chat.completions.create(
         messages=[
             {
@@ -79,7 +99,8 @@ def generate_trino_query(user_query, context):
                 "role": "user",
                 "content": get_trino_query_template().format(
                     user_query=user_query,
-                    context=context
+                    context=context,
+                    feedback_formatted=feedback_formatted
                 )
             }
         ],
@@ -189,6 +210,134 @@ def generate_trino_query_endpoint():
             "message": str(e),
             "timestamp": time.time()
         }), 500
+    
+@app.route('/api/trino/feedback', methods=['POST'])  # Changed to POST
+def submit_feedback():
+    """API endpoint to submit feedback for the generated Trino query."""
+    try:
+        global feedback
+        
+        # Get JSON input
+        data = request.get_json()
+        user_query = data.get("user_query", "")
+        response = data.get("response", "")
+        feedback_text = data.get("feedback", "")
+        
+        if not user_query or not response or not feedback_text:
+            return jsonify({
+                "status": "error",
+                "message": "User query, response, and feedback are all required",
+                "timestamp": time.time()
+            }), 400
+            
+        # Add feedback to our dictionary, limited to 3 entries
+        if len(feedback) < 3:
+            feedback[user_query] = {
+                "response": response,
+                "feedback": feedback_text
+            }
+        else:
+            # Remove the oldest feedback entry if there are more than 3 entries
+            first_key = next(iter(feedback))  # Get the first key
+            del feedback[first_key]
+            # Add the new feedback
+            feedback[user_query] = {
+                "response": response,
+                "feedback": feedback_text
+            }
+            
+        return jsonify({
+            "status": "success",
+            "message": "Feedback submitted successfully",
+            "timestamp": time.time(),
+            "feedback_count": len(feedback)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "timestamp": time.time()
+        }), 500
+
+
+@app.route('/api/trino/get_feedback', methods=['GET'])
+def get_feedback_endpoint():
+    """API endpoint to get all stored feedback."""
+    try:
+        global feedback
+        
+        return jsonify({
+            "status": "success",
+            "data": {
+                "feedback": feedback,
+                "count": len(feedback)
+            },
+            "timestamp": time.time()
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "timestamp": time.time()
+        }), 500
+
+@app.route('/api/trino/autocomplete', methods=['POST'])
+def autocomplete():
+    """API endpoint to provide code autocompletion using Groq's qwen-2.5-coder-32b model."""
+    try:
+        data = request.get_json()
+        code_context = data.get("code_context", "")
+        if not code_context:
+            return jsonify({
+                "status": "error",
+                "message": "Code context is required for autocompletion.",
+                "timestamp": time.time()
+            }), 400
+
+        # Use a concise system prompt for faster code suggestions
+        auto_complete_result = clientg.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a code autocompletion assistant. "
+                        "you are given with code context : {code_context}"
+                        "here is the context from the user : {user_query}"
+                        "Given a short snippet of code that user migh write (act as a autocomplete assitance), provide the most appropriate completion suggestion in the code format only, do not generate any other text other than the code "
+                        "that fits the context."
+                        "So basically you will be given incomplete code, you need to return the next two to three words  "
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": code_context
+                }
+            ],
+            model="qwen-2.5-coder-32b",
+            max_tokens=50, # Adjust the max tokens as needed
+            temperature=0.3 # Lower temperature for more deterministic suggestions
+        )
+
+            
+
+        completion = auto_complete_result.choices[0].message.content
+        return jsonify({
+            "status": "success",
+            "data": {
+                "completion": completion
+            },
+            "timestamp": time.time()
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "timestamp": time.time()
+        }), 500
+
 
 @app.route('/api/trino/health', methods=['GET'])
 def health_check():
