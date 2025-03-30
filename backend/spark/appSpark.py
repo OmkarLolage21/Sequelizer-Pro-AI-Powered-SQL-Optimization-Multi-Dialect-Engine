@@ -30,7 +30,8 @@ if not COHERE_API_KEY:
     print("WARNING: COHERE_API_KEY environment variable is not set. Reranking will not work.")
     print("Please set the COHERE_API_KEY in your .env file or as an environment variable.")
 
-
+global schema
+schema = {}
 
 import pickle
 
@@ -66,6 +67,7 @@ def get_spark_query_template():
     Given the following:
     User Question: {user_query}
     Context from Documentation: {context}
+    schema of the  tables in the database: {schema}
     
     Please provide:
     1. A detailed Spark SQL query that addresses the user's question
@@ -179,6 +181,22 @@ def process_query(user_query):
         "documentation_context": doc_context,
         "generated_query": spark_query
     }
+
+@app.route('/set_schema', methods=['POST'])
+def set_schema():
+    global schema
+    schema = request.json  # Expecting JSON payload
+    return jsonify({"message": "Schema set successfully", "schema": schema}), 200
+
+@app.route('/get_schema', methods=['GET'])
+def get_schema():
+    return jsonify({"schema": schema}), 200
+
+@app.route('/clear_schema', methods=['POST'])
+def clear_schema():
+    global schema
+    schema = {}
+    return jsonify({"message": "Schema cleared successfully"}), 200
 
 @app.route('/api/spark/query', methods=['POST'])
 def generate_spark_query_endpoint():

@@ -126,6 +126,98 @@ def execute_spark():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
+@app.route('/databases', methods=['GET'])
+def list_databases():
+    try:
+        conn = mysql.connector.connect(**MYSQL_CONFIG)
+        cursor = conn.cursor()
+        cursor.execute("SHOW DATABASES;")
+        results = cursor.fetchall()
+        # Each result is a tuple with a single database name.
+        databases = [db[0] for db in results]
+        cursor.close()
+        conn.close()
+        return jsonify({'databases': databases})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# New endpoint to fetch all tables in a specific database.
+@app.route('/databases/<dbname>/tables', methods=['GET'])
+def list_tables(dbname):
+    try:
+        # Create a copy of the mysql config and update the database.
+        config = MYSQL_CONFIG.copy()
+        config['database'] = dbname
+        conn = mysql.connector.connect(**config)
+        cursor = conn.cursor()
+        cursor.execute("SHOW TABLES;")
+        results = cursor.fetchall()
+        # Each result is a tuple with a single table name.
+        tables = [table[0] for table in results]
+        cursor.close()
+        conn.close()
+        return jsonify({'database': dbname, 'tables': tables})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/databases/<dbname>/tables/<tablename>/schema', methods=['GET'])
+def get_table_schema(dbname, tablename):
+    try:
+        # Create a copy of the MYSQL_CONFIG and update for the specific database.
+        config = MYSQL_CONFIG.copy()
+        config['database'] = dbname
+        conn = mysql.connector.connect(**config)
+        cursor = conn.cursor()
+        # Use DESCRIBE to get the schema of the table.
+        cursor.execute(f"DESCRIBE {tablename};")
+        results = cursor.fetchall()
+        columns = [col[0] for col in cursor.description] if cursor.description else []
+        cursor.close()
+        conn.close()
+        return jsonify({
+            'database': dbname,
+            'table': tablename,
+            'schema': {
+                'columns': columns,
+                'results': results
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/databases/<dbname>/schemas', methods=['GET'])
+def get_all_schemas(dbname):
+    try:
+        config = MYSQL_CONFIG.copy()
+        config['database'] = dbname
+        conn = mysql.connector.connect(**config)
+        cursor = conn.cursor()
+
+        # Get all tables in the specified database.
+        cursor.execute("SHOW TABLES;")
+        tables = [table[0] for table in cursor.fetchall()]
+
+        all_schemas = {}
+
+        # For each table, retrieve its schema using DESCRIBE.
+        for tablename in tables:
+            cursor.execute(f"DESCRIBE {tablename};")
+            results = cursor.fetchall()
+            columns = [col[0] for col in cursor.description] if cursor.description else []
+            all_schemas[tablename] = {
+                'columns': columns,
+                'results': results
+            }
+
+        cursor.close()
+        conn.close()
+        return jsonify({
+            'database': dbname,
+            'schemas': all_schemas
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
 if __name__ == '__main__':
     # Run the Flask server on all interfaces on port 5000.
-    app.run(host='0.0.0.0', port=5001)
+    app.run(host='0.0.0.0', port=5001, debug=True)

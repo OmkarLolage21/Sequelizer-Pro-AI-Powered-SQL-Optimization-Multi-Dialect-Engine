@@ -4,6 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Database, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +30,17 @@ interface Message {
   query?: string;
   id?: string;
 }
+interface TableSchema {
+  columns: string[];
+  results: any[][];
+}
 
+interface DatabaseSchema {
+  database: string;
+  schemas: {
+    [tableName: string]: TableSchema;
+  };
+}
 interface SqlChatProps {
   dialect: "Trino" | "Spark";
   onQueryGenerated: (query: string) => void;
@@ -42,9 +61,109 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
   const [currentFeedbackMessage, setCurrentFeedbackMessage] =
     useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [databases, setDatabases] = useState<string[]>([]);
+  const [selectedDatabase, setSelectedDatabase] = useState<string>("");
+  const [schemaOpen, setSchemaOpen] = useState(false);
+  const [databaseSchema, setDatabaseSchema] = useState<DatabaseSchema | null>(null);
+  const [isFetchingSchema, setIsFetchingSchema] = useState(false);
+  const fetchDatabases = async () => {
+    try {
+      const response = await fetch(`http://localhost:5001/databases`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch databases");
+      }
+      const data = await response.json();
+      setDatabases(data.databases || []);
+    } catch (error) {
+      console.error("Error fetching databases:", error);
+      toast({
+        title: "Error fetching databases",
+        description: "Could not fetch available databases",
+        variant: "destructive",
+      });
+    }
+  };
 
+  const handleDatabaseChange = async (db: string) => {
+    setSelectedDatabase(db);
+    try {
+      const response = await fetch(`http://localhost:5003/api/trino/set_global_schema`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ dbname: db , schema_definition: ""}),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to set database context");
+      }
+
+      toast({
+        title: "Database context set",
+        description: `Using database: ${db}`,
+      });
+    } catch (error) {
+      console.error("Error setting database context:", error);
+      toast({
+        title: "Error setting database context",
+        description: "Could not set database context",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const clearDatabaseContext = async () => {
+    try {
+      const response = await fetch(`http://localhost:5001/clear-database-context`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to clear database context");
+      }
+
+      setSelectedDatabase("");
+      toast({
+        title: "Database context cleared",
+        description: "No database selected",
+      });
+    } catch (error) {
+      console.error("Error clearing database context:", error);
+      toast({
+        title: "Error clearing database context",
+        description: "Could not clear database context",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchDatabaseSchema = async () => {
+    if (!selectedDatabase) return;
+    
+    setIsFetchingSchema(true);
+    try {
+      const response = await fetch(`http://localhost:5001/databases/${selectedDatabase}/schemas`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch database schema");
+      }
+      const data = await response.json();
+      setDatabaseSchema(data);
+      setSchemaOpen(true);
+    } catch (error) {
+      console.error("Error fetching database schema:", error);
+      toast({
+        title: "Error fetching schema",
+        description: "Could not fetch database schema",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingSchema(false);
+    }
+  };
   useEffect(() => {
-    scrollToBottom();
+    // scrollToBottom();
+    fetchDatabases();
   }, [messages]);
 
   const scrollToBottom = () => {
@@ -241,7 +360,10 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ user_query: input }),
+        body: JSON.stringify({ 
+          user_query: input,
+          database: selectedDatabase || undefined 
+        }),
       });
 
       if (!response.ok) {
@@ -314,6 +436,49 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
 
   return (
     <div className="flex flex-col h-[600px]">
+      <div className="flex items-center justify-between px-4 pt-4">
+        <div className="flex items-center space-x-2">
+          <Database className="h-5 w-5 text-purple-500" />
+          <h3 className="font-semibold text-white">AI SQL Assistant</h3>
+          {selectedDatabase && (
+            <Badge variant="secondary" className="flex items-center">
+              {selectedDatabase}
+              <button
+                onClick={clearDatabaseContext}
+                className="ml-1 rounded-full hover:bg-gray-600 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+        </div>
+        <div className="flex space-x-2">
+          <Select
+            value={selectedDatabase}
+            onValueChange={handleDatabaseChange}
+            disabled={isLoading}
+          >
+            <SelectTrigger className="w-[180px] bg-gray-800 border-gray-700 text-white">
+              <SelectValue placeholder="Select database" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-800 border-gray-700 text-white">
+              {databases.map((db) => (
+                <SelectItem key={db} value={db} className="hover:bg-gray-700">
+                  {db}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            onClick={fetchDatabaseSchema}
+            disabled={!selectedDatabase || isFetchingSchema}
+          >
+            Show Tables
+          </Button>
+        </div>
+      </div>
+  
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => (
           <div
@@ -436,7 +601,7 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
-
+  
       <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
         <DialogContent className="sm:max-w-[425px] bg-gray-900 border-gray-700">
           <DialogHeader>
@@ -475,7 +640,51 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
           </div>
         </DialogContent>
       </Dialog>
-
+  
+      <Dialog open={schemaOpen} onOpenChange={setSchemaOpen}>
+        <DialogContent className="sm:max-w-[800px] bg-gray-900 border-gray-700 max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Database Schema: {databaseSchema?.database}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Tables and their structure in the selected database
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {databaseSchema && Object.entries(databaseSchema.schemas).map(([tableName, schema]) => (
+              <div key={tableName} className="bg-gray-800/50 p-4 rounded-md">
+                <h4 className="font-semibold text-white mb-3">{tableName}</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-700">
+                        {schema.columns.map((column) => (
+                          <th key={column} className="p-2 text-left text-gray-300 border border-gray-600">
+                            {column}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schema.results.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="border-b border-gray-700 hover:bg-gray-700/50">
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="p-2 text-gray-300 border border-gray-700">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+  
       {messages.length === 1 && (
         <div className="px-4 mb-4">
           <Button
@@ -488,7 +697,7 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
           </Button>
         </div>
       )}
-
+  
       <form onSubmit={handleSubmit} className="p-4 border-t border-gray-800">
         <div className="flex space-x-2">
           <Input

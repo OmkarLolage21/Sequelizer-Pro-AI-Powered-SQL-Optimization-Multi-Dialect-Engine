@@ -189,6 +189,7 @@ export default function SqlPage() {
           columns: mockData.columns,
           results: mockData.results,
         };
+        console.log(originalData)
         const formattedResults = convertDataFormat(originalData);
         console.log(formattedResults)
         setQueryResults(formattedResults)

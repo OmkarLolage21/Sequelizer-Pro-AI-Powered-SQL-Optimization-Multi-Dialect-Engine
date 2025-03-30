@@ -1,3 +1,15 @@
+### Get all databases
+GET http://localhost:5001/databases
+Accept: application/json
+### Get schema for the "orders" table in the "sales" database
+GET http://localhost:5001/databases/sales/tables/customers/schema
+Accept: application/json
+###
+GET http://localhost:5001/databases/sales/schemas
+Accept: application/json
+### Get all tables for the "sales" database
+GET http://localhost:5001/databases/sales/tables
+Accept: application/json
 ### Execute MySQL Query - Fetch rows from customers table
 POST http://localhost:5001/execute/mysql
 Content-Type: application/json
@@ -21,4 +33,29 @@ Content-Type: application/json
 
 {
   "query": "SELECT * FROM customers"
+}
+
+### Set Global Schema
+POST http://localhost:5003/api/trino/set_global_schema
+Content-Type: application/json
+Accept: application/json
+
+{
+  "dbname": "sales",
+  "schema_definition": "your schema definition here"
+}
+
+### Delete Global Schema
+POST http://localhost:5003/api/trino/delete_schema
+Content-Type: application/json
+Accept: application/json
+
+{}
+### Generate Trino SQL Query
+POST http://localhost:5003/api/trino/query
+Content-Type: application/json
+Accept: application/json
+
+{
+  "user_query": "Can you analyse sales data"
 }

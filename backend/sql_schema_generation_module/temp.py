@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 from langchain.retrievers.document_compressors import CohereRerank
 from langchain.retrievers import ContextualCompressionRetriever
 import pickle
+import mysql.connector
+from datetime import datetime
+
 # Load environment variables
 load_dotenv()
 
@@ -17,26 +20,57 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)  # Allow CORS for testing with Thunder Client
 
+# MySQL Configuration
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_USER = os.getenv("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
+MYSQL_DB = "history"
+MYSQL_PORT = 3306
+
+def get_db_connection():
+    """Create a connection to the MySQL database."""
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root",
+        database="history",  # Using the database from docker-compose
+        port=3306
+    )
+
+def init_db():
+    """Initialize the database and create necessary tables if they don't exist."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Create schema_history table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS schema_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_query TEXT NOT NULL,
+        sql_statements TEXT NOT NULL,
+        explanation TEXT,
+        schema_type VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_by VARCHAR(100),
+        is_active BOOLEAN DEFAULT TRUE
+    )
+    ''')
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Database initialized successfully!")
+
+# Initialize the database on startup
+init_db()
+
 with open("ensemble_retriever.pkl", "rb") as f:
     ensemble_retriever = pickle.load(f)
 print("Ensemble retriever successfully loaded!")
+
 # Get API keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-
-# Initialize Weaviate Client
-# client = get_weaviate_client()
-
-# # Hybrid Search Retriever
-# retriever = WeaviateHybridSearchRetriever(
-#     client=client,
-#     index_name="RAG",
-#     text_key="content",
-#     alpha=0.5,
-#     enable_limit=True,
-#     create_schema_if_missing=True,
-#     k=1
-# )
 
 # Contextual Compression with Cohere
 compressor = CohereRerank(cohere_api_key=COHERE_API_KEY)
@@ -51,6 +85,7 @@ clientgg = instructor.from_groq(Groq(), mode=instructor.Mode.JSON)
 
 class OLAPSchemaExplanationResponse(BaseModel):
     explanation: str = Field(description="Reasoning and explanation behind the OLAP schema choice.")
+
 def generate_explanation_ans(inputquery, user_query):
     """Generate structured OLAP schema explanation response."""
     query = f"""
@@ -71,11 +106,10 @@ def generate_explanation_ans(inputquery, user_query):
         return response.dict()
     except Exception as e:
         return {"error": f"Unable to generate explanation: {str(e)}"}
+
 # Pydantic Schema Model
 class OLAPSchemaResponse(BaseModel):
-
     sql_statements: str = Field(description="SQL statements to generate the schema with REFRENCES keyword to show relationship between tables.")
-
 
 def get_olap_best_practices(user_query):
     """Retrieve OLAP best practices."""
@@ -91,7 +125,6 @@ def get_olap_best_practices(user_query):
     )
     response_text = chat_completion.choices[0].message.content
     return response_text.strip()
-
 
 def generate_database_schema(user_query, olap_context, llm_res):
     """Generate database schema based on OLAP context."""
@@ -117,11 +150,9 @@ def generate_database_schema(user_query, olap_context, llm_res):
     response_text = chat_completion.choices[0].message.content
     return response_text.strip()
 
-
 def clean_text(text):
     """Clean unwanted characters from text."""
     return re.sub(r'[\*\#\\]', '', text).strip()
-
 
 def process_query(user_query):
     """Retrieve documents and OLAP best practices."""
@@ -130,7 +161,6 @@ def process_query(user_query):
     retrieved_docs = compression_retriever.invoke(cleaned_response + user_query)
     retrieved_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
     return response, retrieved_text
-
 
 def generate_final_ans(inputquery, user_query):
     """Generate structured OLAP schema response."""
@@ -152,7 +182,39 @@ def generate_final_ans(inputquery, user_query):
     except Exception as e:
         return {"error": f"Unable to generate schema: {str(e)}"}
 
-
+def save_schema_to_database(user_query, sql_statements, explanation, username="nio2004"):
+    """Save the generated schema to the database."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Extract schema type from explanation
+        schema_type = None
+        if isinstance(explanation, dict) and "explanation" in explanation:
+            schema_type_match = re.search(r'(Star|Snowflake|Fact\s+Constellation)', explanation["explanation"], re.IGNORECASE)
+            if schema_type_match:
+                schema_type = schema_type_match.group(0)
+        
+        # Prepare explanation text
+        explanation_text = explanation.get("explanation") if isinstance(explanation, dict) else str(explanation)
+        
+        # Insert into database
+        query = """
+        INSERT INTO schema_history 
+        (user_query, sql_statements, explanation, schema_type, created_by) 
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (user_query, sql_statements, explanation_text, schema_type, username))
+        
+        conn.commit()
+        schema_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return schema_id
+    except Exception as e:
+        print(f"Error saving schema to database: {str(e)}")
+        return None
 
 @app.route("/generate_schema", methods=["POST"])
 def generate_schema():
@@ -161,6 +223,7 @@ def generate_schema():
         # Get JSON input
         data = request.get_json()
         user_query = data.get("user_query", "")
+        username = data.get("username", "nio2004")  # Default to nio2004 if not provided
 
         if not user_query:
             return jsonify({"error": "User query is required"}), 400
@@ -174,12 +237,29 @@ def generate_schema():
         fans = generate_final_ans(ans, user_query)
         explanation = generate_explanation_ans(ans, user_query)
 
-        return jsonify({"sql_code": fans, "explanation": explanation})
+        # Save schema to database
+        schema_id = None
+        if isinstance(fans, dict) and "sql_statements" in fans:
+            schema_id = save_schema_to_database(
+                user_query, 
+                fans["sql_statements"], 
+                explanation,
+                username
+            )
+
+        response_data = {
+            "sql_code": fans, 
+            "explanation": explanation
+        }
+        
+        if schema_id:
+            response_data["schema_id"] = schema_id
+            response_data["message"] = "Schema successfully saved to database"
+
+        return jsonify(response_data)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 # Run the Flask app
 if __name__ == "__main__":
