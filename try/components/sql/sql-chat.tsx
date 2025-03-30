@@ -8,7 +8,7 @@ import { toast } from "@/components/ui/use-toast"
 
 interface Message {
   role: "user" | "assistant"
-  content: string
+  content: React.ReactNode
   query?: string
 }
 
@@ -28,13 +28,56 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // ... (keep existing useEffect and scrollToBottom functions)
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const formatBestPractices = (bestPractices: string) => {
+    if (!bestPractices) return <p className="text-sm text-gray-400">No specific best practices provided</p>
+    
+    // Split by double asterisks to identify sections
+    const sections = bestPractices.split(/\*\*(.*?)\*\*/).filter(Boolean)
+    
+    return (
+      <div className="mt-4 space-y-3">
+        <h4 className="font-semibold text-gray-200">Best Practices:</h4>
+        {sections.map((section, index) => {
+          if (index % 2 === 0) return null // Skip content between headers
+          
+          const header = section.trim()
+          const content = sections[index + 1]?.trim() || ''
+          const items = content.split(/\d+\.\s+/).filter(Boolean)
+          
+          return (
+            <div key={index} className="bg-gray-900/50 p-3 rounded-md">
+              <h5 className="font-medium text-blue-300 mb-1">{header}</h5>
+              {items.length > 0 ? (
+                <ul className="list-disc pl-5 space-y-1">
+                  {items.map((item, i) => (
+                    <li key={i} className="text-sm text-gray-300">
+                      {item.trim().replace(/\.$/, '')}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-300">{content}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim()) return
 
-    const userMessage = { role: "user" as const, content: input }
+    const userMessage: Message = { role: "user", content: input }
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
@@ -65,63 +108,64 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
 
       const data = await response.json()
       
-      // Extract the query from the response
-      let generatedQuery = ""
-      if (data.data?.generated_query) {
-        const queryMatch = data.data.generated_query.match(/QUERY:\s*([\s\S]*?)(?=EXPLANATION:|OPTIMIZATIONS:|$)/i)
-        generatedQuery = queryMatch ? queryMatch[1].trim() : data.data.generated_query
-      }
+      // Extract the clean SQL query from the response
+      let generatedQuery = data.data?.generated_query || ""
+      let bestPractices = data.data?.best_practices || ""
+      
+      // Parse the SQL query from markdown code blocks if present
+      const queryMatch = generatedQuery.match(/```sql\n([\s\S]*?)\n```/)
+      const cleanQuery = queryMatch ? queryMatch[1].trim() : generatedQuery
 
-      if (!generatedQuery) {
+      if (!cleanQuery) {
         throw new Error('No query was generated')
       }
 
-      const responseContent = `Here's a ${dialect} SQL query based on your request:\n\n\`\`\`sql\n${generatedQuery}\n\`\`\`\n\nBest Practices:\n${data.data?.best_practices || "No specific best practices provided"}`
+      // Format the chat response
+      const responseContent = (
+        <div>
+          <p>Here's a {dialect} SQL query based on your request:</p>
+          <div className="my-2 bg-gray-900 p-3 rounded-md">
+            <pre className="text-sm text-gray-300 overflow-x-auto">
+              {cleanQuery}
+            </pre>
+          </div>
+          {formatBestPractices(bestPractices)}
+        </div>
+      )
 
-      const assistantMessage = { 
-        role: "assistant" as const, 
+      const assistantMessage: Message = { 
+        role: "assistant", 
         content: responseContent,
-        query: generatedQuery 
+        query: cleanQuery
       }
       
       setMessages((prev) => [...prev, assistantMessage])
-      onQueryGenerated(generatedQuery)
+      onQueryGenerated(cleanQuery)
     } catch (error) {
       console.error("Error generating query:", error)
-      setMessages((prev) => [...prev, {
+      const errorMessage: Message = {
         role: "assistant",
         content: error instanceof Error 
           ? `Sorry, I couldn't generate a query: ${error.message}`
           : "Sorry, I couldn't generate a query. Please try again later.",
-      }])
+      }
+      setMessages((prev) => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleGenerateExample = async () => {
-    setInput("Show me monthly sales by category for the last 6 months");
-    // Optionally trigger submit automatically
-    // await handleSubmit(new Event('submit'));
+    setInput("Show me monthly sales by category for the last 6 months")
   }
 
-  const handleImportToEditor = (content: string, query?: string) => {
+  const handleImportToEditor = (query?: string) => {
     if (query) {
-      onQueryGenerated(query);
+      onQueryGenerated(query)
       toast({
         title: "Query imported",
         description: "The SQL query has been imported to the editor",
-      });
-    } else {
-      // Fallback to extracting from content if query not provided
-      const sqlMatch = content.match(/sql\n([\s\S]*?)\n/);
-      if (sqlMatch && sqlMatch[1]) {
-        onQueryGenerated(sqlMatch[1]);
-        toast({
-          title: "Query imported",
-          description: "The SQL query has been imported to the editor",
-        });
-      }
+      })
     }
   }
 
@@ -155,26 +199,20 @@ export function SqlChat({ dialect, onQueryGenerated }: SqlChatProps) {
                   message.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-200"
                 }`}
               >
-                {message.role === "assistant" && message.content.includes("sql") ? (
-                  <div>
-                    <div className="whitespace-pre-wrap">{message.content.split("sql")[0]}</div>
-                    <div className="my-2 bg-gray-900 p-3 rounded-md">
-                      <pre className="text-sm text-gray-300 overflow-x-auto">
-                        {message.query || message.content.match(/sql\n([\s\S]*?)\n/)?.[1]}
-                      </pre>
-                    </div>
-                    <div className="whitespace-pre-wrap">{message.content.split("```")[2]}</div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => handleImportToEditor(message.content, message.query)}
-                    >
-                      Import to Editor
-                    </Button>
-                  </div>
-                ) : (
+                {typeof message.content === 'string' ? (
                   <div className="whitespace-pre-wrap">{message.content}</div>
+                ) : (
+                  message.content
+                )}
+                {message.role === "assistant" && message.query && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => handleImportToEditor(message.query)}
+                  >
+                    Import to Editor
+                  </Button>
                 )}
               </div>
             </div>
